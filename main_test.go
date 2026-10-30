@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -148,6 +149,98 @@ func TestCLI(t *testing.T) {
 		}
 		if tt.defaultUntil && (o.end.Before(before) || o.end.After(after)) {
 			t.Errorf("%q: default until = %v, expected current time", tt.args, o.end)
+		}
+	}
+}
+
+func TestHostsOnlyBanDoesNotWarnAboutFirewall(t *testing.T) {
+	t.Setenv("PATH", "")
+	dir := t.TempDir()
+	config := filepath.Join(dir, "config.yaml")
+	body := fmt.Sprintf("enforcement: [hosts_deny]\ndb_path: %q\nhosts_deny_path: %q\n", filepath.Join(dir, "test.db"), filepath.Join(dir, "hosts.deny"))
+	if err := os.WriteFile(config, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	oldArgs := os.Args
+	os.Args = []string{"sentryguard", "ban", "10.20.100.101", "--config", config}
+	defer func() { os.Args = oldArgs }()
+	var logs bytes.Buffer
+	oldLog := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(oldLog)
+	if err := run(); err != nil {
+		t.Fatal(err)
+	}
+	if logs.Len() != 0 {
+		t.Fatalf("hosts-only ban logged warning: %s", logs.String())
+	}
+	hosts, err := os.ReadFile(filepath.Join(dir, "hosts.deny"))
+	if err != nil || !strings.Contains(string(hosts), "10.20.100.101") {
+		t.Fatalf("hosts=%s err=%v", hosts, err)
+	}
+}
+
+func TestEnforcementStrategySwitch(t *testing.T) {
+	dir := t.TempDir()
+	db, err := openDB(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	tool := "#!/bin/sh\nif [ \"$1\" = list ]; then exit 0; fi\n/bin/cat > \"$SENTRY_STRATEGY_LOG\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "nft"), []byte(tool), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("SENTRY_STRATEGY_LOG", filepath.Join(dir, "nft.log"))
+	c := Config{HostsDenyPath: filepath.Join(dir, "hosts.deny")}
+	if err := banDB(db, "203.0.113.7", time.Now(), 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := reconcile(db, c); err != nil {
+		t.Fatal(err)
+	}
+	c.Enforcement = []string{"firewall"}
+	if err := reconcile(db, c); err != nil {
+		t.Fatal(err)
+	}
+	hosts, _ := os.ReadFile(c.HostsDenyPath)
+	if strings.Contains(string(hosts), "203.0.113.7") {
+		t.Fatal("disabled hosts strategy retained ban")
+	}
+	c.Enforcement = []string{"hosts_deny"}
+	if err := reconcile(db, c); err != nil {
+		t.Fatal(err)
+	}
+	log, _ := os.ReadFile(filepath.Join(dir, "nft.log"))
+	if strings.Contains(string(log), "add rule") || !strings.Contains(string(log), "flush chain") {
+		t.Fatalf("disabled firewall script=%s", log)
+	}
+	hosts, _ = os.ReadFile(c.HostsDenyPath)
+	if !strings.Contains(string(hosts), "203.0.113.7") {
+		t.Fatal("hosts strategy missing ban")
+	}
+	if ips, err := activeIPs(db, time.Now()); err != nil || len(ips) != 1 {
+		t.Fatalf("bans=%v err=%v", ips, err)
+	}
+}
+
+func TestEnforcementConfigValidation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	for _, data := range []string{"{}", "enforcement: [firewall]", "enforcement: [hosts_deny]"} {
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, _, _, err := readConfig(path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, data := range []string{"enforcement: []", "enforcement: [unknown]"} {
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, _, _, err := readConfig(path); err == nil {
+			t.Fatalf("accepted %s", data)
 		}
 	}
 }

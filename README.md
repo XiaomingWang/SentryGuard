@@ -12,9 +12,26 @@ Brute-force login attempts are a common security concern for anyone running a cl
 
 ## How It Works
 
-SentryGuard counts failed SSH password attempts from each IP within a configurable time window and records bans in SQLite. It enforces bans through an available firewall backend, preferring active firewalld or ufw installations before falling back to nftables or iptables. It also maintains its own entries in `/etc/hosts.deny`.
+SentryGuard counts failed SSH password attempts from each IP within a configurable time window and records bans in SQLite. By default, it enforces bans through both an available firewall backend and its own entries in `/etc/hosts.deny`. Either strategy can also be enabled on its own.
 
-Effective connection blocking requires a supported firewall backend. The `/etc/hosts.deny` file applies only to services that use TCP Wrappers, and existing `hosts.allow` rules can take precedence. If no firewall backend is available, SentryGuard continues recording bans and updating `hosts.deny`, but logs a warning because SSH connections may remain possible. Firewall command failures are reported explicitly.
+The `/etc/hosts.deny` file applies only to services that use TCP Wrappers, and existing `hosts.allow` rules can take precedence. Modern SSH deployments generally require firewall enforcement for effective connection blocking. If firewall enforcement is selected but no backend is available, SentryGuard logs a warning and continues recording bans; it updates `hosts.deny` only if that strategy is enabled. Firewall command failures are reported explicitly.
+
+## Enforcement Strategies
+
+Set `enforcement` in `/etc/SentryGuard/config.yaml` to select the enforcement strategies:
+
+Commands always load `/etc/SentryGuard/config.yaml` unless `--config PATH` is supplied. Editing `./config.yaml` does not change that default. To use a configuration in the current directory, run `sudo ./sentryguard ban 10.20.100.101 --config ./config.yaml`. With `enforcement: [hosts_deny]`, the firewall-unavailable warning is suppressed.
+
+```yaml
+# Both strategies (default, including when the key is omitted)
+enforcement: [firewall, hosts_deny]
+# Firewall only
+# enforcement: [firewall]
+# TCP Wrappers only
+# enforcement: [hosts_deny]
+```
+
+Restart the service after changing this setting. Disabled strategies have their SentryGuard-managed rules removed, while ban records remain in SQLite. Cleanup requires the original firewall tool to be available; otherwise its tracked rules are retained for a later cleanup attempt. Other applications' rules and unmarked hosts.deny entries are preserved. An empty list or unknown strategy is rejected. Firewall selection remains automatic when enabled: active firewalld, active ufw, nftables, then iptables.
 
 ## Build
 
@@ -38,7 +55,7 @@ If an earlier manual installation left `/usr/local/sbin/sentryguard` on the host
 Ubuntu/Debian:
 
 ```sh
-sudo apt install ./dist/sentryguard_0.11.0_amd64.deb
+sudo apt install ./dist/sentryguard_0.12.0_amd64.deb
 sudo systemctl enable --now sentryguard
 sudo systemctl status sentryguard
 ```
@@ -46,7 +63,7 @@ sudo systemctl status sentryguard
 CentOS/RHEL with systemd (7 or newer):
 
 ```sh
-sudo dnf install ./dist/sentryguard-0.11.0-1.x86_64.rpm
+sudo dnf install ./dist/sentryguard-0.12.0-1.x86_64.rpm
 sudo systemctl enable --now sentryguard
 sudo systemctl status sentryguard
 ```
@@ -80,8 +97,8 @@ Run the service as root: it needs journal access, permission to update `/etc/hos
 The ZIP includes the Linux executable, `install.sh`, `uninstall.sh`, example YAML, systemd unit, README, and VERSION. It does not require Go on the destination host. Use the archive matching the host architecture; the provided build is for Linux amd64. The host needs systemd/journald for service management and login monitoring.
 
 ```sh
-unzip dist/sentryguard-0.11.0-linux-amd64.zip
-cd sentryguard-0.11.0-linux-amd64
+unzip dist/sentryguard-0.12.0-linux-amd64.zip
+cd sentryguard-0.12.0-linux-amd64
 sudo sh install.sh
 sudo systemctl enable --now sentryguard
 sudo systemctl status sentryguard

@@ -18,6 +18,10 @@ ban_duration: permanent
 # POP3, MYSQL, POSTGRESQL, ALL. Port blocking uses active firewalld/ufw,
 # nftables, or iptables/ip6tables, in that order of preference.
 ban_protocols: [SSH]
+# Ban enforcement strategies: firewall, hosts_deny, or both (default).
+# Changing this setting removes SentryGuard rules for disabled strategies.
+# hosts_deny only protects services built with TCP Wrappers support.
+enforcement: [firewall, hosts_deny]
 # How often to check new SSH journal entries and expired bans (minimum 1s).
 poll_interval: 30s
 # SQLite file used for bans, failed-attempt counts, and the journal cursor.

@@ -48,6 +48,19 @@ type Config struct {
 	Whitelist     []string `yaml:"whitelist"`
 	Timezone      string   `yaml:"timezone"`
 	BanProtocols  []string `yaml:"ban_protocols"`
+	Enforcement   []string `yaml:"enforcement"`
+}
+
+func (c Config) usesEnforcement(name string) bool {
+	if c.Enforcement == nil {
+		return true
+	}
+	for _, value := range c.Enforcement {
+		if value == name {
+			return true
+		}
+	}
+	return false
 }
 
 var protocolPorts = map[string]int{
@@ -148,6 +161,19 @@ func readConfig(path string) (Config, time.Duration, time.Duration, time.Duratio
 	var extra any
 	if dec.Decode(&extra) != io.EOF {
 		return c, 0, 0, 0, errors.New("configuration must contain one YAML document")
+	}
+	if c.Enforcement == nil {
+		c.Enforcement = []string{"firewall", "hosts_deny"}
+	}
+	if len(c.Enforcement) == 0 {
+		return c, 0, 0, 0, errors.New("enforcement must contain firewall, hosts_deny, or both")
+	}
+	for i, value := range c.Enforcement {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value != "firewall" && value != "hosts_deny" {
+			return c, 0, 0, 0, fmt.Errorf("invalid enforcement strategy %q; use firewall or hosts_deny", value)
+		}
+		c.Enforcement[i] = value
 	}
 	if c.Threshold < 1 || c.DBPath == "" || c.HostsDenyPath == "" {
 		return c, 0, 0, 0, errors.New("invalid threshold or path")
@@ -527,10 +553,16 @@ func reconcile(db *sql.DB, c Config) error {
 	if err != nil {
 		return err
 	}
-	if err := syncManagedFirewallEntries(db, entries, c); err != nil {
-		return err
+	firewallErr := syncManagedFirewallEntries(db, entries, c)
+	hostEntries := entries
+	if !c.usesEnforcement("hosts_deny") {
+		hostEntries = nil
+		if _, err := os.Lstat(c.HostsDenyPath); os.IsNotExist(err) {
+			return firewallErr
+		}
 	}
-	return syncHostsEntries(c.HostsDenyPath, entries)
+	hostsErr := syncHostsEntries(c.HostsDenyPath, hostEntries)
+	return errors.Join(firewallErr, hostsErr)
 }
 
 func expire(db *sql.DB, c Config) error {

@@ -241,7 +241,10 @@ func syncManagedFirewall(db *sql.DB, ips []string, c Config) error {
 }
 
 func syncManagedFirewallEntries(db *sql.DB, entries []banEntry, c Config) error {
-	backend := firewallBackend()
+	backend := "disabled"
+	if c.usesEnforcement("firewall") {
+		backend = firewallBackend()
+	}
 	previous, err := storedFirewallRules(db)
 	if err != nil {
 		return err
@@ -252,7 +255,7 @@ func syncManagedFirewallEntries(db *sql.DB, entries []banEntry, c Config) error 
 		}
 	}
 	desired := []firewallRule{}
-	if backend != "nft" && backend != "none" {
+	if backend != "nft" && backend != "none" && backend != "disabled" {
 		desired = desiredFirewallRulesEntries(backend, entries)
 	}
 	want := make(map[firewallRule]bool, len(desired))
@@ -279,9 +282,12 @@ func syncManagedFirewallEntries(db *sql.DB, entries []banEntry, c Config) error 
 	if backend == "nft" {
 		return syncFirewallEntries(entries, c)
 	}
+	if backend == "disabled" {
+		return nil
+	}
 	if backend == "none" {
 		nftWarning.Do(func() {
-			log.Print("warning: no active firewalld/ufw or installed nftables/iptables; only hosts.deny will be updated (SSH may not be blocked)")
+			log.Print("warning: no active firewalld/ufw or installed nftables/iptables; firewall enforcement is unavailable (hosts.deny is updated only if enabled)")
 		})
 		return nil
 	}
