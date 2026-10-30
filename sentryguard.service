@@ -1,0 +1,18 @@
+[Unit]
+Description=SentryGuard SSH brute force protection
+After=systemd-journald.service network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/sentryguard run
+Restart=on-failure
+RestartSec=5s
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_DAC_OVERRIDE
+
+[Install]
+WantedBy=multi-user.target

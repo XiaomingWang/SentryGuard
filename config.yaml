@@ -1,0 +1,39 @@
+# Copy this file to /etc/SentryGuard/config.yaml (owner root, mode 0600).
+# Number of consecutive failed SSH passwords from one IP before a ban.
+# The "ban --since START [--until END]" command uses this same threshold.
+threshold: 5
+# Rolling time window for failed passwords from one IP (default: 4 hours).
+# On first run after install or upgrade, the previous 3 days are scanned.
+# A manual "ban --since ..." scan also applies this window inside its range.
+# A successful login resets the count.
+failure_window: 4h
+# Automatic ban duration. Use "permanent" or a duration such as 60d or 24h.
+# Manual bans are permanent unless --duration is supplied on the command line.
+ban_duration: permanent
+# Connection services blocked after an SSH failure threshold is reached.
+# Use a YAML list, for example [SSH, FTP], or [ALL] by itself.
+# SSHD/SFTP are accepted as aliases of SSH. This controls ban enforcement;
+# failure detection still reads SSH journal messages only.
+# Supported: SSH, FTP, FTPS, TELNET, RDP, HTTP, HTTPS, SMTP, IMAP,
+# POP3, MYSQL, POSTGRESQL, ALL. Port blocking uses active firewalld/ufw,
+# nftables, or iptables/ip6tables, in that order of preference.
+ban_protocols: [SSH]
+# How often to check new SSH journal entries and expired bans (minimum 1s).
+poll_interval: 30s
+# SQLite file used for bans, failed-attempt counts, and the journal cursor.
+db_path: /etc/SentryGuard/sentryguard.db
+# TCP Wrappers deny file. Effective blocking also needs a firewall backend.
+hosts_deny_path: /etc/hosts.deny
+# IPv4/IPv6 addresses or CIDR networks exempt from SentryGuard bans.
+# Add multiple entries as YAML list items, then restart the service.
+# Example:
+# whitelist:
+#   - "192.0.2.10"
+#   - "192.168.0.0/24"
+#   - "2001:db8::10"
+whitelist: []
+# Timezone for list output and datetimes without offsets in --since/--until.
+# Local uses the system timezone. UTC, CST (China UTC+8), and IANA names
+# such as Asia/Shanghai or America/Chicago are also supported.
+# SQLite stores timestamps in UTC regardless of this setting.
+timezone: Local

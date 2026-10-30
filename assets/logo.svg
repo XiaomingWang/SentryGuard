@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">SentryGuard</title>
+  <desc id="desc">A line shield with a watchful eye, representing protection against brute-force login attacks.</desc>
+  <g stroke="#2563EB" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 12 106 28v31c0 26-17 43-42 57-25-14-42-31-42-57V28Z"/>
+    <path d="M38 60s10-15 26-15 26 15 26 15-10 15-26 15-26-15-26-15Z"/>
+    <circle cx="64" cy="60" r="7"/>
+    <path d="M64 86v10"/>
+  </g>
+</svg>
